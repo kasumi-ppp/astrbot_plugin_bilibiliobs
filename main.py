@@ -16,6 +16,7 @@ class BiliLiveNoticePlugin(Star):
         self.max_monitors = int(self.config.get("max_monitors", 50)) if isinstance(self.config, dict) else 50
         self.enable_notifications = bool(self.config.get("enable_notifications", True)) if isinstance(self.config, dict) else True
         self.enable_end_notifications = bool(self.config.get("enable_end_notifications", True)) if isinstance(self.config, dict) else True
+        self.enable_at_group = bool(self.config.get("enable_at_group", False)) if isinstance(self.config, dict) else False
         self.monitored_uids: Dict[str, Dict] = {}  # 存储监控的UP主信息
         self.live_status_cache: Dict[str, int] = {}  # 缓存直播状态
         self.uid_error_counts: Dict[str, int] = {}
@@ -84,6 +85,7 @@ class BiliLiveNoticePlugin(Star):
                     self.live_status_cache = data.get('live_status_cache', {})
                     self.enable_notifications = data.get('enable_notifications', self.enable_notifications)
                     self.enable_end_notifications = data.get('enable_end_notifications', self.enable_end_notifications)
+                    self.enable_at_group = data.get('enable_at_group', self.enable_at_group)
                     logger.info(f"已加载 {len(self.monitored_uids)} 个监控配置")
             else:
                 # 兼容旧路径迁移
@@ -95,6 +97,7 @@ class BiliLiveNoticePlugin(Star):
                         self.live_status_cache = data.get('live_status_cache', {})
                         self.enable_notifications = data.get('enable_notifications', self.enable_notifications)
                         self.enable_end_notifications = data.get('enable_end_notifications', self.enable_end_notifications)
+                        self.enable_at_group = data.get('enable_at_group', self.enable_at_group)
                         logger.info(f"已从旧路径迁移 {len(self.monitored_uids)} 个监控配置")
                     # 保存到新路径
                     await self.save_config()
@@ -110,7 +113,8 @@ class BiliLiveNoticePlugin(Star):
                 'monitored_uids': self.monitored_uids,
                 'live_status_cache': self.live_status_cache,
                 'enable_notifications': self.enable_notifications,
-                'enable_end_notifications': self.enable_end_notifications
+                'enable_end_notifications': self.enable_end_notifications,
+                'enable_at_group': self.enable_at_group
             }
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
@@ -286,7 +290,10 @@ class BiliLiveNoticePlugin(Star):
             # 使用AstrBot的消息发送机制
             unified_msg_origin = monitor_info.get("unified_msg_origin")
             if unified_msg_origin:
-                message_chain = MessageChain().message(message)
+                if self.enable_at_group:
+                    message_chain = MessageChain().at_all().message(message)
+                else:
+                    message_chain = MessageChain().message(message)
                 await self.context.send_message(unified_msg_origin, message_chain)
                 logger.info(f"开播通知已发送: {uname}")
             else:
