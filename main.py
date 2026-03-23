@@ -6,6 +6,7 @@ from typing import Dict
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult, MessageChain
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger, AstrBotConfig
+from astrbot.api.message_components import AtAll, Plain
 
 @register("bili_live_notice", "Binbin&gealach", "B站UP主开播监测插件", "1.0.0", "https://github.com/Gal-criticism/astrbot_plugin_bilibiliobs")
 class BiliLiveNoticePlugin(Star):
@@ -291,9 +292,9 @@ class BiliLiveNoticePlugin(Star):
             unified_msg_origin = monitor_info.get("unified_msg_origin")
             if unified_msg_origin:
                 if self.enable_at_group:
-                    message_chain = MessageChain().at_all().message(message)
+                    message_chain = MessageChain([AtAll(), Plain(message)])
                 else:
-                    message_chain = MessageChain().message(message)
+                    message_chain = MessageChain([Plain(message)])
                 await self.context.send_message(unified_msg_origin, message_chain)
                 logger.info(f"开播通知已发送: {uname}")
             else:
@@ -497,6 +498,21 @@ class BiliLiveNoticePlugin(Star):
         except Exception as e:
             logger.error(f"获取插件状态失败: {e}")
             yield event.plain_result("❌ 获取插件状态失败")
+
+    @filter.command("测试atall")
+    async def test_at_all(self, event: AstrMessageEvent):
+        """测试@所有人功能"""
+        try:
+            unified_msg_origin = event.unified_msg_origin
+            if unified_msg_origin:
+                message_chain = MessageChain([AtAll(), Plain("测试@所有人功能")])
+                await self.context.send_message(unified_msg_origin, message_chain)
+                logger.info("测试at_all已发送")
+            else:
+                yield event.plain_result("❌ 无法获取消息来源")
+        except Exception as e:
+            logger.error(f"测试at_all失败: {e}")
+            yield event.plain_result(f"❌ 测试失败: {e}")
 
     @filter.command("开启通知")
     async def enable_notify_cmd(self, event: AstrMessageEvent):
