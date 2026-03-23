@@ -17,7 +17,7 @@ class BiliLiveNoticePlugin(Star):
         self.max_monitors = int(self.config.get("max_monitors", 50)) if isinstance(self.config, dict) else 50
         self.enable_notifications = bool(self.config.get("enable_notifications", True)) if isinstance(self.config, dict) else True
         self.enable_end_notifications = bool(self.config.get("enable_end_notifications", True)) if isinstance(self.config, dict) else True
-        self.enable_at_group = bool(self.config.get("enable_at_group", False)) if isinstance(self.config, dict) else False
+        self.enable_at_group = bool(self.config.get("enable_at_group", True)) if isinstance(self.config, dict) else True
         self.monitored_uids: Dict[str, Dict] = {}  # 存储监控的UP主信息
         self.live_status_cache: Dict[str, int] = {}  # 缓存直播状态
         self.uid_error_counts: Dict[str, int] = {}

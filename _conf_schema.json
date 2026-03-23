@@ -3,7 +3,7 @@
     "description": "开播通知是否@所有人",
     "type": "bool",
     "hint": "开启后会在开播通知中@全体成员，关播通知不受影响",
-    "default": false
+    "default": true
   },
   "check_interval": {
     "description": "监控检查间隔（秒）",
