@@ -280,29 +280,28 @@ class BiliLiveNoticePlugin(Star):
             if not self.enable_notifications:
                 logger.info("已禁用开播通知，跳过发送")
                 return
+            
+            unified_msg_origin = monitor_info.get("unified_msg_origin")
+            if not unified_msg_origin:
+                logger.warning(f"无法发送开播通知，缺少unified_msg_origin: {uid}")
+                return
+            
             uname = status_info.get("uname", "未知UP主")
             title = status_info.get("title", "无标题")
             room_id = status_info.get("room_id", 0)
+            
+            if self.enable_at_group:
+                at_chain = MessageChain([AtAll()])
+                await self.context.send_message(unified_msg_origin, at_chain)
             
             message = f"🔴 {uname} 开播啦！\n"
             message += f"📺 直播标题: {title}\n"
             message += f"🔗 直播间: https://live.bilibili.com/{room_id}"
             
-            # 使用AstrBot的消息发送机制
-            unified_msg_origin = monitor_info.get("unified_msg_origin")
-            if unified_msg_origin:
-                # 发送第一条消息：开播通知内容
-                message_chain = MessageChain([Plain(message)])
-                await self.context.send_message(unified_msg_origin, message_chain)
-                
-                # 如果开启了at所有人，发送第二条@消息
-                if self.enable_at_group:
-                    at_chain = MessageChain([AtAll()])
-                    await self.context.send_message(unified_msg_origin, at_chain)
-                
-                logger.info(f"开播通知已发送: {uname}")
-            else:
-                logger.warning(f"无法发送开播通知，缺少unified_msg_origin: {uid}")
+            message_chain = MessageChain([Plain(message)])
+            await self.context.send_message(unified_msg_origin, message_chain)
+            
+            logger.info(f"开播通知已发送: {uname}")
             
         except Exception as e:
             logger.error(f"发送开播通知失败: {e}")
