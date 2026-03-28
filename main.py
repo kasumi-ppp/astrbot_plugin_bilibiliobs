@@ -162,7 +162,7 @@ class BiliLiveNoticePlugin(Star):
         except Exception as e:
             logger.error(f"获取UID {uid} 直播状态失败: {e}")
         
-        return {"live_status": 0, "room_id": 0, "title": "", "uname": ""}
+        return None
     
     async def get_live_status_batch(self, uids: list[str]) -> Dict[str, Dict]:
         """批量获取多个UID的直播状态，返回以字符串UID为键的字典"""
@@ -228,6 +228,9 @@ class BiliLiveNoticePlugin(Star):
         """监控直播状态的后台任务"""
         consecutive_errors = 0
         max_consecutive_errors = 5
+        network_error_count = 0
+        max_network_errors = 3
+        last_network_error = False
         
         while True:
             try:
@@ -244,26 +247,50 @@ class BiliLiveNoticePlugin(Star):
                 uids = [uid for uid in monitored_copy.keys() if self.uid_skip_until.get(uid, 0) <= now]
                 status_map = await self.get_live_status_batch(uids)
                 
+                # 检查网络状态
+                current_network_error = len(status_map) == 0 and len(uids) > 0
+                
+                # 网络从错误恢复
+                if last_network_error and not current_network_error:
+                    logger.info("网络恢复，强制刷新所有UP主状态")
+                    # 强制刷新所有UP主的状态
+                    all_uids = list(monitored_copy.keys())
+                    full_status_map = await self.get_live_status_batch(all_uids)
+                    for uid, monitor_infos in monitored_copy.items():
+                        full_status = full_status_map.get(uid)
+                        if full_status:
+                            # 更新缓存
+                            self.live_status_cache[uid] = full_status.get("live_status", 0)
+                            # 清除错误计数和退避
+                            self.uid_error_counts.pop(uid, None)
+                            self.uid_skip_until.pop(uid, None)
+                
+                # 处理每个UP主的状态
                 for uid, monitor_infos in monitored_copy.items():
                     current_status = status_map.get(uid)
                     previous_status = self.live_status_cache.get(uid, 0)
                     
                     # 只有在获取到有效状态时才更新
                     if current_status:
-                        # 检测到开播
-                        if current_status.get("live_status") == 1 and previous_status != 1:
-                            await self.send_live_notification(uid, current_status, monitor_infos)
-                        
-                        # 检测到关播
-                        if previous_status == 1 and current_status.get("live_status") != 1:
-                            await self.send_end_notification(uid, current_status, monitor_infos)
-                        
-                        # 更新缓存
-                        self.live_status_cache[uid] = current_status.get("live_status", 0)
-                        
-                        # 清除错误计数和退避
-                        self.uid_error_counts.pop(uid, None)
-                        self.uid_skip_until.pop(uid, None)
+                        # 验证状态数据的有效性
+                        if current_status.get("uname") and current_status.get("room_id"):
+                            # 检测到开播
+                            if current_status.get("live_status") == 1 and previous_status != 1:
+                                await self.send_live_notification(uid, current_status, monitor_infos)
+                            
+                            # 检测到关播
+                            if previous_status == 1 and current_status.get("live_status") != 1:
+                                await self.send_end_notification(uid, current_status, monitor_infos)
+                            
+                            # 更新缓存
+                            self.live_status_cache[uid] = current_status.get("live_status", 0)
+                            
+                            # 清除错误计数和退避
+                            self.uid_error_counts.pop(uid, None)
+                            self.uid_skip_until.pop(uid, None)
+                        else:
+                            # 数据无效，保持原有状态
+                            logger.warning(f"获取到无效的直播状态数据: {uid}")
                     else:
                         # 获取状态失败，保持原有状态
                         # 增加错误计数和退避
@@ -271,6 +298,15 @@ class BiliLiveNoticePlugin(Star):
                         self.uid_error_counts[uid] = cnt
                         self.uid_skip_until[uid] = now + min(300, 30 * cnt)
                         logger.warning(f"获取UID {uid} 直播状态失败，保持原有状态")
+                
+                # 更新网络错误状态
+                if current_network_error:
+                    network_error_count += 1
+                    logger.warning(f"网络错误计数: {network_error_count}")
+                else:
+                    network_error_count = 0
+                
+                last_network_error = current_network_error
                 
                 # 重置错误计数器
                 consecutive_errors = 0
@@ -339,7 +375,7 @@ class BiliLiveNoticePlugin(Star):
                 return
             uname = status_info.get("uname", "未知UP主")
             message = f"⚫ {uname} 已结束直播"
-            message_chain = MessageChain().message(message)
+            message_chain = MessageChain([Plain(message)])
             
             # 向所有相关群发送通知
             for monitor_info in monitor_infos:
@@ -373,7 +409,7 @@ class BiliLiveNoticePlugin(Star):
             
             # 检查UP主是否存在
             status_info = await self.get_live_status(uid)
-            if not status_info.get("uname"):
+            if not status_info or not status_info.get("uname"):
                 yield event.plain_result(f"❌ 未找到UID为 {uid} 的UP主")
                 return
             
@@ -510,7 +546,7 @@ class BiliLiveNoticePlugin(Star):
                 return
             
             status_info = await self.get_live_status(uid)
-            if not status_info.get("uname"):
+            if not status_info or not status_info.get("uname"):
                 yield event.plain_result(f"❌ 未找到UID为 {uid} 的UP主")
                 return
             
