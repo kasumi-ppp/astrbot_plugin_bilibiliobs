@@ -358,32 +358,72 @@ class BiliLiveNoticePlugin(Star):
                         logger.warning(f"无法发送开播通知，缺少unified_msg_origin: {uid}")
                         continue
                     
-                    # 构建消息链，包含@所有人（如果启用）
-                    message_components = []
+                    # 尝试发送带@所有人的消息
                     if self.enable_at_group:
-                        message_components.append(AtAll())
-                    message_components.append(Plain(message))
-                    message_chain = MessageChain(message_components)
-                    
-                    # 发送消息，带重试机制
-                    max_retries = 2
-                    retry_count = 0
-                    while retry_count <= max_retries:
-                        try:
-                            await self.context.send_message(unified_msg_origin, message_chain)
-                            logger.info(f"开播通知已发送到群: {uname}")
-                            break
-                        except Exception as e:
-                            retry_count += 1
-                            if retry_count <= max_retries:
-                                logger.warning(f"发送开播通知失败，第{retry_count}次重试: {e}")
-                                # 指数退避延迟
-                                await asyncio.sleep(0.5 * (2 ** retry_count))
-                            else:
-                                logger.error(f"发送开播通知到群失败: {e}")
+                        message_components = [AtAll(), Plain(message)]
+                        message_chain = MessageChain(message_components)
+                        
+                        # 发送消息，带重试机制
+                        max_retries = 2
+                        retry_count = 0
+                        at_all_success = False
+                        
+                        while retry_count <= max_retries:
+                            try:
+                                await self.context.send_message(unified_msg_origin, message_chain)
+                                logger.info(f"开播@所有人通知已发送到群: {uname}")
+                                at_all_success = True
+                                break
+                            except Exception as e:
+                                retry_count += 1
+                                if retry_count <= max_retries:
+                                    logger.warning(f"发送开播@所有人通知失败，第{retry_count}次重试: {e}")
+                                    # 指数退避延迟
+                                    await asyncio.sleep(1.0 * (2 ** retry_count))
+                                else:
+                                    logger.error(f"发送开播@所有人通知失败: {e}")
+                        
+                        # 如果@所有人失败，尝试发送普通消息
+                        if not at_all_success:
+                            logger.info(f"@所有人失败，尝试发送普通开播通知到群: {uname}")
+                            message_components = [Plain(message)]
+                            message_chain = MessageChain(message_components)
+                            
+                            retry_count = 0
+                            while retry_count <= max_retries:
+                                try:
+                                    await self.context.send_message(unified_msg_origin, message_chain)
+                                    logger.info(f"普通开播通知已发送到群: {uname}")
+                                    break
+                                except Exception as e:
+                                    retry_count += 1
+                                    if retry_count <= max_retries:
+                                        logger.warning(f"发送普通开播通知失败，第{retry_count}次重试: {e}")
+                                        await asyncio.sleep(1.0 * (2 ** retry_count))
+                                    else:
+                                        logger.error(f"发送普通开播通知到群失败: {e}")
+                    else:
+                        # 直接发送普通消息
+                        message_components = [Plain(message)]
+                        message_chain = MessageChain(message_components)
+                        
+                        max_retries = 2
+                        retry_count = 0
+                        while retry_count <= max_retries:
+                            try:
+                                await self.context.send_message(unified_msg_origin, message_chain)
+                                logger.info(f"开播通知已发送到群: {uname}")
+                                break
+                            except Exception as e:
+                                retry_count += 1
+                                if retry_count <= max_retries:
+                                    logger.warning(f"发送开播通知失败，第{retry_count}次重试: {e}")
+                                    await asyncio.sleep(1.0 * (2 ** retry_count))
+                                else:
+                                    logger.error(f"发送开播通知到群失败: {e}")
                     
                     # 增加发送延迟，避免频率限制
-                    await asyncio.sleep(1.0)  # 1秒延迟，减少频率限制
+                    await asyncio.sleep(2.0)  # 2秒延迟，进一步减少频率限制
                 except Exception as e:
                     logger.error(f"发送开播通知到群失败: {e}")
                     # 继续处理下一个群，不影响其他群的通知发送
@@ -398,7 +438,6 @@ class BiliLiveNoticePlugin(Star):
                 return
             uname = status_info.get("uname", "未知UP主")
             message = f"⚫ {uname} 已结束直播"
-            message_chain = MessageChain([Plain(message)])
             
             # 向所有相关群发送通知
             for monitor_info in monitor_infos:
@@ -407,6 +446,10 @@ class BiliLiveNoticePlugin(Star):
                     if not unified_msg_origin:
                         logger.warning(f"无法发送关播通知，缺少unified_msg_origin: {uid}")
                         continue
+                    
+                    # 构建普通消息
+                    message_components = [Plain(message)]
+                    message_chain = MessageChain(message_components)
                     
                     # 发送消息，带重试机制
                     max_retries = 2
@@ -421,12 +464,12 @@ class BiliLiveNoticePlugin(Star):
                             if retry_count <= max_retries:
                                 logger.warning(f"发送关播通知失败，第{retry_count}次重试: {e}")
                                 # 指数退避延迟
-                                await asyncio.sleep(0.5 * (2 ** retry_count))
+                                await asyncio.sleep(1.0 * (2 ** retry_count))
                             else:
                                 logger.error(f"发送关播通知到群失败: {e}")
                     
                     # 增加发送延迟，避免频率限制
-                    await asyncio.sleep(1.0)  # 1秒延迟，减少频率限制
+                    await asyncio.sleep(2.0)  # 2秒延迟，进一步减少频率限制
                 except Exception as e:
                     logger.error(f"发送关播通知到群失败: {e}")
                     # 继续处理下一个群，不影响其他群的通知发送
