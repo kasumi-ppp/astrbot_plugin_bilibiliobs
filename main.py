@@ -358,7 +358,7 @@ class BiliLiveNoticePlugin(Star):
                         logger.warning(f"无法发送开播通知，缺少unified_msg_origin: {uid}")
                         continue
                     
-                    # 构建消息链
+                    # 构建消息链，包含@所有人（如果启用）
                     message_components = []
                     if self.enable_at_group:
                         message_components.append(AtAll())
@@ -370,7 +370,7 @@ class BiliLiveNoticePlugin(Star):
                     logger.info(f"开播通知已发送到群: {uname}")
                     
                     # 增加发送延迟，避免频率限制
-                    await asyncio.sleep(0.5)  # 500毫秒延迟
+                    await asyncio.sleep(0.3)  # 300毫秒延迟，与下播通知一致
                 except Exception as e:
                     logger.error(f"发送开播通知到群失败: {e}")
                     # 继续处理下一个群，不影响其他群的通知发送
