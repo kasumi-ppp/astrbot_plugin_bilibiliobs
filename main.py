@@ -350,21 +350,31 @@ class BiliLiveNoticePlugin(Star):
             message += f"📺 直播标题: {title}\n"
             message += f"🔗 直播间: https://live.bilibili.com/{room_id}"
             
-            message_chain = MessageChain([Plain(message)])
-            
             # 向所有相关群发送通知
             for monitor_info in monitor_infos:
-                unified_msg_origin = monitor_info.get("unified_msg_origin")
-                if not unified_msg_origin:
-                    logger.warning(f"无法发送开播通知，缺少unified_msg_origin: {uid}")
+                try:
+                    unified_msg_origin = monitor_info.get("unified_msg_origin")
+                    if not unified_msg_origin:
+                        logger.warning(f"无法发送开播通知，缺少unified_msg_origin: {uid}")
+                        continue
+                    
+                    # 构建消息链
+                    message_components = []
+                    if self.enable_at_group:
+                        message_components.append(AtAll())
+                    message_components.append(Plain(message))
+                    message_chain = MessageChain(message_components)
+                    
+                    # 发送消息
+                    await self.context.send_message(unified_msg_origin, message_chain)
+                    logger.info(f"开播通知已发送到群: {uname}")
+                    
+                    # 增加发送延迟，避免频率限制
+                    await asyncio.sleep(0.5)  # 500毫秒延迟
+                except Exception as e:
+                    logger.error(f"发送开播通知到群失败: {e}")
+                    # 继续处理下一个群，不影响其他群的通知发送
                     continue
-                
-                if self.enable_at_group:
-                    at_chain = MessageChain([AtAll()])
-                    await self.context.send_message(unified_msg_origin, at_chain)
-                
-                await self.context.send_message(unified_msg_origin, message_chain)
-                logger.info(f"开播通知已发送到群: {uname}")
             
         except Exception as e:
             logger.error(f"发送开播通知失败: {e}")
@@ -379,10 +389,21 @@ class BiliLiveNoticePlugin(Star):
             
             # 向所有相关群发送通知
             for monitor_info in monitor_infos:
-                unified_msg_origin = monitor_info.get("unified_msg_origin")
-                if unified_msg_origin:
+                try:
+                    unified_msg_origin = monitor_info.get("unified_msg_origin")
+                    if not unified_msg_origin:
+                        logger.warning(f"无法发送关播通知，缺少unified_msg_origin: {uid}")
+                        continue
+                    
                     await self.context.send_message(unified_msg_origin, message_chain)
                     logger.info(f"关播通知已发送到群: {uname}")
+                    
+                    # 增加发送延迟，避免频率限制
+                    await asyncio.sleep(0.3)  # 300毫秒延迟
+                except Exception as e:
+                    logger.error(f"发送关播通知到群失败: {e}")
+                    # 继续处理下一个群，不影响其他群的通知发送
+                    continue
         except Exception as e:
             logger.error(f"发送关播通知失败: {e}")
     
